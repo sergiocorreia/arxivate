@@ -296,12 +296,13 @@ class ArxivPreparer:
         print(f"      Kept {kept} files, removed {removed} temporary files")
 
     def _create_zip(self) -> Path:
-        """Create a zip archive of the output directory."""
+        """Create a zip archive of the output directory (excluding the main PDF)."""
         zip_path = self.output_dir.with_suffix(".zip")
+        main_pdf = Path(self.files[self.main_tex].flattened).with_suffix(".pdf").name
 
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for file in sorted(self.output_dir.iterdir()):
-                if file.is_file():
+                if file.is_file() and file.name != main_pdf:
                     zf.write(file, file.name)
 
         size_mb = zip_path.stat().st_size / (1024 * 1024)
