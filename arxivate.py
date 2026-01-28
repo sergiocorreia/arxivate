@@ -136,6 +136,8 @@ class ArxivPreparer:
 
         self._register_file(tex_file, is_tex=True)
         content = tex_file.read_text(encoding="utf-8", errors="replace")
+        # Strip comments before parsing to avoid picking up commented-out includes
+        content = self._strip_comments(content)
 
         for cmd, (pattern, extensions) in INCLUDE_PATTERNS.items():
             for match in re.finditer(pattern, content):
@@ -224,7 +226,9 @@ class ArxivPreparer:
         """Remove LaTeX comments from content, preserving escaped \\%."""
         content = COMMENT_PATTERN.sub("", content)
         lines = [line.rstrip() for line in content.split("\n")]
-        return "\n".join(lines)
+        result = "\n".join(lines).rstrip("\n")
+        # Ensure file ends with exactly one newline (arXiv warns otherwise)
+        return result + "\n"
 
     def _update_paths(self, content: str) -> str:
         """Update all file paths in content to use flattened names."""
