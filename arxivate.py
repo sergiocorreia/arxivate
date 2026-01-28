@@ -224,20 +224,39 @@ class ArxivPreparer:
                 print(f"      Processed: {mapping.flattened}")
 
     def _strip_comments(self, content: str) -> str:
-        """Remove LaTeX comments from content, preserving escaped \\%."""
+        """Remove LaTeX comments while preserving spacing behavior.
+        
+        In LaTeX, % at end of line prevents the newline from becoming a space.
+        When we remove %, we must also remove the newline to preserve spacing.
+        """
+        lines = content.split("\n")
         result_lines = []
-        for line in content.split("\n"):
+        join_next = False
+        
+        for line in lines:
             original_blank = not line.strip()
+            had_comment = COMMENT_PATTERN.search(line) is not None
             stripped = COMMENT_PATTERN.sub("", line).rstrip()
-            if original_blank:
+            
+            if join_next and stripped:
+                # Join with previous line (the % was eating the newline)
+                result_lines[-1] += stripped
+                # If this line also had a comment, continue joining
+                join_next = had_comment
+            elif original_blank:
                 # Keep intentional blank lines (paragraph breaks)
                 result_lines.append("")
+                join_next = False
             elif stripped:
                 # Keep non-empty lines after comment removal
                 result_lines.append(stripped)
-            # Skip lines that became empty after comment removal (comment-only lines)
+                # If line had content + comment, the % was eating the newline
+                join_next = had_comment
+            else:
+                # Comment-only line: skip it, don't join next
+                join_next = False
+        
         result = "\n".join(result_lines).rstrip("\n")
-        # Ensure file ends with exactly one newline (arXiv warns otherwise)
         return result + "\n"
 
     def _update_paths(self, content: str) -> str:
