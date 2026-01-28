@@ -4,13 +4,14 @@ arxivate.py - Prepare a LaTeX project for arXiv submission.
 
 This script takes a main .tex file, collects all dependencies recursively,
 strips comments, flattens the directory structure, compiles the document,
-and cleans up temporary files.
+cleans up temporary files, and creates a .zip archive for upload.
 """
 
 import re
 import shutil
 import subprocess
 import sys
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated
@@ -46,6 +47,14 @@ TEMP_EXTENSIONS = {
 # Regex to match LaTeX comments (% not preceded by \)
 COMMENT_PATTERN = re.compile(r"(?<!\\)%.*$", re.MULTILINE)
 
+# arXiv allowed filename characters: letters, numbers, and these special chars
+ARXIV_SAFE_PATTERN = re.compile(r"[^a-zA-Z0-9_+\-.,=]")
+
+
+def sanitize_filename(name: str) -> str:
+    """Sanitize filename for arXiv compatibility."""
+    return ARXIV_SAFE_PATTERN.sub("_", name)
+
 
 @dataclass
 class FileMapping:
@@ -75,32 +84,36 @@ class ArxivPreparer:
         print(f"Preparing arXiv submission from: {self.main_tex}")
         print(f"Output directory: {self.output_dir}")
 
-        print("\n[1/5] Collecting dependencies...")
+        print("\n[1/6] Collecting dependencies...")
         self._collect_dependencies(self.main_tex)
+        self._collect_style_files()
         print(f"      Found {len(self.files)} files")
 
-        print("\n[2/5] Creating output directory and copying files...")
+        print("\n[2/6] Creating output directory and copying files...")
         self._setup_output_dir()
 
-        print("\n[3/5] Stripping comments and updating paths...")
+        print("\n[3/6] Stripping comments and updating paths...")
         self._process_tex_files()
 
-        print("\n[4/5] Compiling document...")
+        print("\n[4/6] Compiling document...")
         self._compile()
 
-        print("\n[5/5] Cleaning up temporary files...")
+        print("\n[5/6] Cleaning up temporary files...")
         self._cleanup()
 
-        print("\nDone! arXiv submission ready at:", self.output_dir)
+        print("\n[6/6] Creating zip archive...")
+        zip_path = self._create_zip()
+
+        print(f"\nDone! arXiv submission ready:")
+        print(f"  Directory: {self.output_dir}")
+        print(f"  Archive:   {zip_path}")
 
     def _resolve_file(self, path_str: str, extensions: list[str]) -> Path | None:
         """Resolve a file path, trying different extensions if needed."""
         base_path = self.base_dir / path_str
 
-        # Try each extension
         for ext in extensions:
             if ext:
-                # Try appending extension
                 candidate = Path(str(base_path) + ext)
                 if candidate.exists():
                     return candidate.resolve()
@@ -129,12 +142,18 @@ class ArxivPreparer:
                 ref_path = match.group(1).strip()
 
                 if cmd == r"\bibliography":
-                    # Handle multiple bib files separated by comma
                     for bib in ref_path.split(","):
                         self._process_include(bib.strip(), extensions)
                 else:
                     recurse = cmd in (r"\input", r"\include")
                     self._process_include(ref_path, extensions, recurse_tex=recurse)
+
+    def _collect_style_files(self) -> None:
+        """Collect any local .sty files from the base directory."""
+        for sty_file in self.base_dir.glob("*.sty"):
+            if sty_file.resolve() not in self.files:
+                self._register_file(sty_file.resolve(), is_tex=False)
+                print(f"      Found style file: {sty_file.name}")
 
     def _process_include(self, ref_path: str, extensions: list[str], recurse_tex: bool = False) -> None:
         """Process a single include reference."""
@@ -151,7 +170,7 @@ class ArxivPreparer:
             self._collect_dependencies(resolved)
 
     def _register_file(self, path: Path, is_tex: bool = False) -> None:
-        """Register a file with a flattened name."""
+        """Register a file with a flattened, arXiv-safe name."""
         path = path.resolve()
         if path in self.files:
             return
@@ -162,6 +181,9 @@ class ArxivPreparer:
             flattened = str(rel_path).replace("/", "_").replace("\\", "_")
         except ValueError:
             flattened = path.name
+
+        # Sanitize for arXiv compatibility
+        flattened = sanitize_filename(flattened)
 
         # Handle collisions
         base_flattened = flattened
@@ -200,11 +222,8 @@ class ArxivPreparer:
 
     def _strip_comments(self, content: str) -> str:
         """Remove LaTeX comments from content, preserving escaped \\%."""
-        # Remove comments (% not preceded by \)
         content = COMMENT_PATTERN.sub("", content)
-        # Remove lines that are now empty (were comment-only lines)
         lines = [line.rstrip() for line in content.split("\n")]
-        # Filter out empty lines that resulted from comment-only lines, but keep intentional blank lines
         return "\n".join(lines)
 
     def _update_paths(self, content: str) -> str:
@@ -248,6 +267,7 @@ class ArxivPreparer:
             ["bibtex", main_stem],
             ["pdflatex", "-interaction=nonstopmode", main_flattened],
             ["pdflatex", "-interaction=nonstopmode", main_flattened],
+            ["pdflatex", "-interaction=nonstopmode", main_flattened],
         ]
 
         for cmd in commands:
@@ -275,6 +295,19 @@ class ArxivPreparer:
 
         print(f"      Kept {kept} files, removed {removed} temporary files")
 
+    def _create_zip(self) -> Path:
+        """Create a zip archive of the output directory."""
+        zip_path = self.output_dir.with_suffix(".zip")
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for file in sorted(self.output_dir.iterdir()):
+                if file.is_file():
+                    zf.write(file, file.name)
+
+        size_mb = zip_path.stat().st_size / (1024 * 1024)
+        print(f"      Created: {zip_path.name} ({size_mb:.2f} MB)")
+        return zip_path
+
 
 app = typer.Typer(help="Prepare a LaTeX project for arXiv submission")
 
@@ -288,7 +321,7 @@ def main(
     Prepare a LaTeX project for arXiv submission.
 
     Collects all dependencies, strips comments, flattens the directory structure,
-    compiles the document, and cleans up temporary files.
+    compiles the document, cleans up temporary files, and creates a zip archive.
     """
     if not main_tex.exists():
         print(f"Error: File not found: {main_tex}", file=sys.stderr)

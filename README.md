@@ -1,6 +1,6 @@
 # arxivate
 
-Python script that prepares a LaTeX project for arXiv submission.
+Python script that prepares a LaTeX project for arXiv submission. Created partly through an LLM, so YMMV!
 
 ## Features
 
@@ -9,10 +9,13 @@ Python script that prepares a LaTeX project for arXiv submission.
   - `\includegraphics{}` for figures (PDF, PNG, JPG, etc.)
   - `\bibliography{}` and `\bibliographystyle{}` for bibliography files
   - `\lstinputlisting{}` for verbatim file inclusions
+  - Local `.sty` style files
 - **Comment stripping**: Removes all LaTeX comments from .tex files (arXiv makes source available)
 - **Path flattening**: Flattens directory structure and updates all paths automatically
+- **Filename sanitization**: Ensures all filenames use only arXiv-allowed characters
 - **Compilation**: Runs pdflatex + bibtex to generate the .bbl file required by arXiv
 - **Cleanup**: Removes temporary files while keeping essential ones (.tex, figures, .bbl, .bst)
+- **Zip archive**: Creates a ready-to-upload `.zip` file for arXiv submission
 
 ## Requirements
 
@@ -64,9 +67,12 @@ This will:
 The output directory will contain:
 - All .tex files (comment-stripped, with updated paths)
 - All referenced figures
+- Any local `.sty` style files
 - The `.bbl` file (compiled bibliography, required by arXiv)
 - The `.bst` file (bibliography style)
 - The compiled `.pdf` file
+
+Additionally, a `.zip` archive is created alongside the output directory, ready for upload to arXiv.
 
 ## Notes
 
