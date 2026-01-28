@@ -225,11 +225,18 @@ class ArxivPreparer:
 
     def _strip_comments(self, content: str) -> str:
         """Remove LaTeX comments from content, preserving escaped \\%."""
-        content = COMMENT_PATTERN.sub("", content)
-        # Remove lines that are now empty (were comment-only lines)
-        # This prevents blank lines from breaking tikz and other environments
-        lines = [line.rstrip() for line in content.split("\n") if line.strip()]
-        result = "\n".join(lines)
+        result_lines = []
+        for line in content.split("\n"):
+            original_blank = not line.strip()
+            stripped = COMMENT_PATTERN.sub("", line).rstrip()
+            if original_blank:
+                # Keep intentional blank lines (paragraph breaks)
+                result_lines.append("")
+            elif stripped:
+                # Keep non-empty lines after comment removal
+                result_lines.append(stripped)
+            # Skip lines that became empty after comment removal (comment-only lines)
+        result = "\n".join(result_lines).rstrip("\n")
         # Ensure file ends with exactly one newline (arXiv warns otherwise)
         return result + "\n"
 
