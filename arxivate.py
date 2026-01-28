@@ -36,12 +36,13 @@ INCLUDE_PATTERNS: dict[str, tuple[str, list[str]]] = {
 }
 
 # Temp file extensions to remove after compilation
+# Also remove .bib since arXiv uses .bbl instead
 TEMP_EXTENSIONS = {
     ".aux", ".log", ".out", ".blg", ".toc", ".lof", ".lot",
     ".fls", ".fdb_latexmk", ".synctex.gz", ".nav", ".snm",
     ".vrb", ".brf", ".idx", ".ilg", ".ind", ".glo", ".gls",
     ".glg", ".ist", ".acn", ".acr", ".alg", ".run.xml",
-    "-blx.bib", ".bcf",
+    "-blx.bib", ".bcf", ".bib",
 }
 
 # Regex to match LaTeX comments (% not preceded by \)
@@ -225,8 +226,10 @@ class ArxivPreparer:
     def _strip_comments(self, content: str) -> str:
         """Remove LaTeX comments from content, preserving escaped \\%."""
         content = COMMENT_PATTERN.sub("", content)
-        lines = [line.rstrip() for line in content.split("\n")]
-        result = "\n".join(lines).rstrip("\n")
+        # Remove lines that are now empty (were comment-only lines)
+        # This prevents blank lines from breaking tikz and other environments
+        lines = [line.rstrip() for line in content.split("\n") if line.strip()]
+        result = "\n".join(lines)
         # Ensure file ends with exactly one newline (arXiv warns otherwise)
         return result + "\n"
 
