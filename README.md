@@ -25,33 +25,27 @@ Python script that prepares a LaTeX project for arXiv submission. Created partly
 ## Installation
 
 ```bash
-pip install typer
-```
-
-Or install from requirements.txt:
-
-```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Usage
 
 ```bash
 # Basic usage - creates output in <main_file>_arxiv/
-python arxivate.py path/to/main.tex
+arxivate path/to/main.tex
 
 # Specify output directory
-python arxivate.py path/to/main.tex --output arxiv_submission
+arxivate path/to/main.tex --output arxiv_submission
 
 # Short form
-python arxivate.py paper.tex -o submission
+arxivate paper.tex -o submission
 ```
 
 ## Example
 
 ```bash
 # Prepare the example project for arXiv
-python arxivate.py example/00_main.tex --output arxiv_submission
+arxivate example/00_main.tex --output arxiv_submission
 ```
 
 This will:
