@@ -25,7 +25,7 @@ Python script that prepares a LaTeX project for arXiv submission. Created partly
 ## Installation
 
 ```bash
-pip install -e .
+pipx install -e .
 ```
 
 ## Usage

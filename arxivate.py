@@ -213,15 +213,26 @@ class ArxivPreparer:
 
     def _process_tex_files(self) -> None:
         """Process all .tex files: strip comments and update paths."""
+        seen_red = False
         for path, mapping in self.files.items():
             if mapping.is_tex:
                 content = path.read_text(encoding="utf-8", errors="replace")
                 content = self._strip_comments(content)
+                if r"\textcolor{red}" in content:
+                    seen_red = True
                 content = self._update_paths(content)
 
                 dest = self.output_dir / mapping.flattened
                 dest.write_text(content, encoding="utf-8")
                 print(f"      Processed: {mapping.flattened}")
+
+        if seen_red:
+            print(file=sys.stderr)
+            print("!" * 60, file=sys.stderr)
+            print("  WARNING: The document contains \\textcolor{red}{...}", file=sys.stderr)
+            print("  Consider removing or changing before submission.", file=sys.stderr)
+            print("!" * 60, file=sys.stderr)
+            print(file=sys.stderr)
 
     def _strip_comments(self, content: str) -> str:
         """Remove LaTeX comments while preserving spacing behavior.
@@ -305,10 +316,21 @@ class ArxivPreparer:
 
         for cmd in commands:
             print(f"      Running: {' '.join(cmd)}")
-            result = subprocess.run(cmd, cwd=self.output_dir, capture_output=True, text=True)
-            # bibtex can fail if there's no \cite, that's ok
-            if result.returncode != 0 and cmd[0] != "bibtex":
-                print(f"      Warning: {cmd[0]} returned {result.returncode}")
+            result = subprocess.run(
+                cmd,
+                cwd=self.output_dir,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if result.returncode != 0:
+                print(f"Error: {cmd[0]} failed with exit code {result.returncode}", file=sys.stderr)
+                if result.stdout:
+                    print(result.stdout, file=sys.stderr)
+                if result.stderr:
+                    print(result.stderr, file=sys.stderr)
+                sys.exit(1)
 
     def _cleanup(self) -> None:
         """Remove temporary files, keeping essential ones."""
