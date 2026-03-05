@@ -247,7 +247,13 @@ class ArxivPreparer:
         for line in lines:
             original_blank = not line.strip()
             had_comment = COMMENT_PATTERN.search(line) is not None
-            stripped = COMMENT_PATTERN.sub("", line).rstrip()
+            stripped = COMMENT_PATTERN.sub("", line)
+            if had_comment and stripped.strip():
+                # Line had content before the comment; preserve trailing
+                # whitespace (it's real content, not noise)
+                stripped = stripped.rstrip('\r')
+            else:
+                stripped = stripped.rstrip()
             
             if join_next and stripped:
                 # Join with previous line (the % was eating the newline)
