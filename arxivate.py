@@ -21,7 +21,7 @@ import typer
 
 # LaTeX commands that include files: command -> (regex pattern, possible extensions)
 INCLUDE_PATTERNS: dict[str, tuple[str, list[str]]] = {
-    r"\input": (r"\\input\s*\{([^}]+)\}", [".tex", ""]),
+    r"\input": (r"\\input\s*(?:\{([^}]+)\}|([^\s{}%]+))", [".tex", ""]),
     r"\include": (r"\\include\s*\{([^}]+)\}", [".tex"]),
     r"\includegraphics": (
         r"\\includegraphics\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}",
@@ -55,6 +55,14 @@ ARXIV_SAFE_PATTERN = re.compile(r"[^a-zA-Z0-9_+\-.,=]")
 def sanitize_filename(name: str) -> str:
     """Sanitize filename for arXiv compatibility."""
     return ARXIV_SAFE_PATTERN.sub("_", name)
+
+
+def _matched_path(match: re.Match) -> str:
+    """Return the first captured path from an include-style regex."""
+    for group in match.groups():
+        if group is not None:
+            return group
+    raise ValueError("Include pattern did not capture a path")
 
 
 @dataclass
@@ -142,7 +150,7 @@ class ArxivPreparer:
 
         for cmd, (pattern, extensions) in INCLUDE_PATTERNS.items():
             for match in re.finditer(pattern, content):
-                ref_path = match.group(1).strip()
+                ref_path = _matched_path(match).strip()
 
                 if cmd == r"\bibliography":
                     for bib in ref_path.split(","):
@@ -281,7 +289,8 @@ class ArxivPreparer:
 
         def replace_path(match: re.Match, extensions: list[str]) -> str:
             full_match = match.group(0)
-            ref_path = match.group(1).strip()
+            original_ref = _matched_path(match)
+            ref_path = original_ref.strip()
 
             if "," in ref_path:
                 parts = [self._get_flattened_ref(p.strip(), extensions) for p in ref_path.split(",")]
@@ -289,7 +298,9 @@ class ArxivPreparer:
             else:
                 new_ref = self._get_flattened_ref(ref_path, extensions)
 
-            return full_match.replace("{" + match.group(1) + "}", "{" + new_ref + "}")
+            if match.group(1) is not None:
+                return full_match.replace("{" + original_ref + "}", "{" + new_ref + "}")
+            return full_match.replace(original_ref, new_ref, 1)
 
         for cmd, (pattern, extensions) in INCLUDE_PATTERNS.items():
             content = re.sub(pattern, lambda m, ext=extensions: replace_path(m, ext), content)
@@ -311,6 +322,7 @@ class ArxivPreparer:
         """Compile the document using pdflatex and bibtex."""
         main_flattened = self.files[self.main_tex].flattened
         main_stem = Path(main_flattened).stem
+        main_pdf = self.output_dir / Path(main_flattened).with_suffix(".pdf").name
 
         commands = [
             ["pdflatex", "-interaction=nonstopmode", main_flattened],
@@ -332,11 +344,14 @@ class ArxivPreparer:
             )
             if result.returncode != 0:
                 print(f"Error: {cmd[0]} failed with exit code {result.returncode}", file=sys.stderr)
+                if main_pdf.exists():
+                    main_pdf.unlink()
+                    print(f"Removed incomplete PDF: {main_pdf.name}", file=sys.stderr)
                 if result.stdout:
                     print(result.stdout, file=sys.stderr)
                 if result.stderr:
                     print(result.stderr, file=sys.stderr)
-                sys.exit(1)
+                raise typer.Exit(1)
 
     def _cleanup(self) -> None:
         """Remove temporary files, keeping essential ones."""
